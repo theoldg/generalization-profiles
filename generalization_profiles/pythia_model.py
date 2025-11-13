@@ -1,13 +1,13 @@
 from typing import Self
-from torch import Tensor
+
 from transformers import AutoTokenizer, GPTNeoXForCausalLM
 
-MODEL_VARIANTS = {
+MODEL_VARIANTS: set[str] = {
     '70m-deduped',
 }
 
 # Valid revisions are 0, 1000, 2000, ..., 143000 for all models.
-VALID_REVISIONS = {str(step) for step in range(0, 144000, 1000)}
+VALID_REVISIONS: set[int] = {step for step in range(0, 144000, 1000)}
 
 
 class PythiaModel:
@@ -22,7 +22,7 @@ class PythiaModel:
     def from_variant_and_revision(
         cls,
         variant: str,
-        revision: str,
+        revision: int,
     ) -> Self:
         if variant not in MODEL_VARIANTS:
             raise ValueError(f'Invalid model variant: {variant}')
@@ -41,5 +41,6 @@ class PythiaModel:
             revision=f'step{revision}',
             cache_dir=f'./pythia_cache/{variant}/{revision}',
         )
+        # See huggingface.co/EleutherAI/pythia-6.9b/raw/main/tokenizer.json
+        tokenizer.pad_token = '<|padding|>'
         return cls(model=model, tokenizer=tokenizer)
-

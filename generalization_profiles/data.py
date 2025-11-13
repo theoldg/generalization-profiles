@@ -24,7 +24,7 @@ class TokenDataset:
         raise NotImplementedError
 
 
-class MetaBatchedDataset(TokenDataset):
+class MacroBatchedDataset(TokenDataset):
     def __init__(self, original_dataset: TokenDataset, batching_factor: int):
         self.original_dataset = original_dataset
         self.batching_factor = batching_factor
