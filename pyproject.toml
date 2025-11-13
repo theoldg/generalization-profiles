@@ -1,0 +1,22 @@
+[project]
+name = "generalization-profiles"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ruff>=0.14.4",
+    "torch>=2.9.1",
+    "transformers>=4.57.1",
+]
+
+[tool.ruff]
+line-length = 80
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
