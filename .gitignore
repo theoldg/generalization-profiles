@@ -1,13 +1,10 @@
-# Python-generated files
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
-
-# Ruff
-.ruff_cache
-
-# Virtual environments
 .venv
+
+.ruff_cache
+pythia_cache
