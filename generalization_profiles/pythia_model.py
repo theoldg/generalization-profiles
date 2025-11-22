@@ -1,4 +1,5 @@
 from typing import Self
+from pathlib import Path
 
 from transformers import AutoTokenizer, GPTNeoXForCausalLM
 
@@ -23,7 +24,9 @@ class PythiaModel:
         cls,
         variant: str,
         revision: int,
+        cache_dir: str | Path = 'cache/pythia',
     ) -> Self:
+        cache_dir = Path(cache_dir)
         if variant not in MODEL_VARIANTS:
             raise ValueError(f'Invalid model variant: {variant}')
         if revision not in VALID_REVISIONS:
@@ -34,12 +37,12 @@ class PythiaModel:
         model = GPTNeoXForCausalLM.from_pretrained(
             f'EleutherAI/pythia-{variant}',
             revision=f'step{revision}',
-            cache_dir=f'./pythia_cache/{variant}/{revision}',
+            cache_dir=cache_dir / variant / str(revision),
         )
         tokenizer = AutoTokenizer.from_pretrained(
             f'EleutherAI/pythia-{variant}',
             revision=f'step{revision}',
-            cache_dir=f'./pythia_cache/{variant}/{revision}',
+            cache_dir=cache_dir / variant / str(revision),
         )
         # See huggingface.co/EleutherAI/pythia-6.9b/raw/main/tokenizer.json
         tokenizer.pad_token = '<|padding|>'

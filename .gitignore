@@ -7,4 +7,4 @@ wheels/
 .venv
 
 .ruff_cache
-pythia_cache
+cache
