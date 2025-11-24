@@ -1,5 +1,5 @@
-from typing import Self
 from pathlib import Path
+from typing import Self
 
 from transformers import AutoTokenizer, GPTNeoXForCausalLM
 
