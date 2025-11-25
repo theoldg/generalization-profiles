@@ -6,6 +6,8 @@ wheels/
 *.egg-info
 .venv
 
+**/.DS_Store
+
 *.ipynb
 .ruff_cache
 cache

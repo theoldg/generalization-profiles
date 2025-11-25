@@ -231,8 +231,8 @@ def compute_generalization_profile(
     for c in range(n_steps):
         for g in range(1, n_steps):
             if g <= c:
-                profile[c, g - 1] = (
-                    (y[c, g] - y[g - 1, g]) - (y[c, 0] - y[g - 1, 0])
+                profile[c, g - 1] = (y[c, g] - y[g - 1, g]) - (
+                    y[c, 0] - y[g - 1, 0]
                 )
             else:
                 profile[c, g - 1] = np.nan
