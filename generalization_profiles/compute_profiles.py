@@ -1,10 +1,11 @@
+import typing
 from dataclasses import dataclass
 
+import datasets
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm.auto import tqdm
-import datasets
 
 from generalization_profiles.embeddings import Embeddings
 
@@ -55,11 +56,13 @@ def find_all_neighbors(
     batch_size: int = 1024,
     verbose: bool = True,
 ) -> Neighbors:
-    finder = NeighborFinder(embeddings=embeddings, neighbor_set_ids=neighbor_set_ids)
+    finder = NeighborFinder(
+        embeddings=embeddings, neighbor_set_ids=neighbor_set_ids
+    )
     chunks: list[Neighbors] = []
     for i in tqdm(
         range(0, len(embeddings), batch_size),
-        desc="Finding neighbors",
+        desc='Finding neighbors',
         disable=not verbose,
     ):
         id_chunk = embeddings.seq_idx[i : i + batch_size]
@@ -68,7 +71,9 @@ def find_all_neighbors(
     return Neighbors(
         seq_idx=np.concatenate([n.seq_idx for n in chunks]),
         neighbor_idx=np.concatenate([n.neighbor_idx for n in chunks], axis=0),
-        cosine_similarity=np.concatenate([n.cosine_similarity for n in chunks], axis=0),
+        cosine_similarity=np.concatenate(
+            [n.cosine_similarity for n in chunks], axis=0
+        ),
     )
 
 
@@ -90,23 +95,24 @@ class Surprisals:
         self.map_idx = np.vectorize(id_map.__getitem__)
 
 
+@typing.no_type_check
 def _to_dataframe(data: datasets.Dataset) -> pd.DataFrame:
     # Not sure how this works but it's way faster than `pd.DataFrame(data)`
-    return data.with_format("pandas")[:]  # type: ignore
+    return data.with_format('pandas')[:]
 
 
 def _load_surprisals_single(data: datasets.Dataset) -> Surprisals:
     df = _to_dataframe(data)
-    df = df.sort_values(by=["step", "seq_idx"])
+    df = df.sort_values(by=['step', 'seq_idx'])
     steps = []
     values = []
     seq_idx: np.ndarray | None = None
-    for step, values_at_step in df.groupby("step", sort=False):
+    for step, values_at_step in df.groupby('step', sort=False):
         steps.append(step)
-        values.append(values_at_step["sup_seq"].values)
+        values.append(values_at_step['sup_seq'].values)
 
         # Make sure the seq_idx are the same for every step
-        current_seq_idx = np.array(values_at_step["seq_idx"].values)
+        current_seq_idx = np.array(values_at_step['seq_idx'].values)
         if seq_idx is None:
             seq_idx = current_seq_idx
         else:
@@ -114,14 +120,17 @@ def _load_surprisals_single(data: datasets.Dataset) -> Surprisals:
 
     assert seq_idx is not None
 
-    return Surprisals(step=np.array(steps), seq_idx=seq_idx, values=np.stack(values))
+    return Surprisals(
+        step=np.array(steps), seq_idx=seq_idx, values=np.stack(values)
+    )
 
 
+@typing.no_type_check
 def load_surprisals() -> dict[str, Surprisals]:
-    dataset = datasets.load_dataset("pietrolesci/pythia-deduped-stats")
+    dataset = datasets.load_dataset('pietrolesci/pythia-deduped-stats')
     return {
-        model_name: _load_surprisals_single(data)  # type: ignore
-        for model_name, data in dataset.items()  # type: ignore
+        model_name: _load_surprisals_single(data)
+        for model_name, data in dataset.items()
     }
 
 
@@ -167,7 +176,11 @@ def compute_generalization_profile(
         (
             np.floor(
                 surprisals.seq_idx
-                / (pythia_batch_size * macro_batching_factor * checkpoint_interval)
+                / (
+                    pythia_batch_size
+                    * macro_batching_factor
+                    * checkpoint_interval
+                )
             ).astype(int)
             + 1
         )
@@ -225,4 +238,3 @@ def compute_generalization_profile(
                 profile[c, g - 1] = np.nan
 
     return profile
-
