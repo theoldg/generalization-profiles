@@ -135,7 +135,7 @@ def compute_aggregated_surprisals(
         embeddings=embeddings,
         neighbor_set_ids=neighbor_set_ids,
         top_k=top_k,
-        verbose=True,
+        verbose=False,
     )
     neighbor_ids = neighbors[surprisals.seq_idx]
 
@@ -155,6 +155,7 @@ def compute_generalization_profile(
     embeddings: Embeddings,
     top_k: int,
     macro_batching_factor: int = 5,
+    memorization_only: bool = False,
 ) -> np.ndarray:
     checkpoint_interval = 1000
     pythia_batch_size = 1024
@@ -182,13 +183,16 @@ def compute_generalization_profile(
         seq_idx=surprisals.seq_idx,
     )
 
-    neighbor_set_ids = surprisals.seq_idx[first_seen_step == -1]
-    neighborhood_surprisals = compute_aggregated_surprisals(
-        surprisals=surprisals,
-        embeddings=embeddings,
-        neighbor_set_ids=neighbor_set_ids,
-        top_k=top_k,
-    )
+    if memorization_only:
+        neighborhood_surprisals = surprisals
+    else:
+        neighbor_set_ids = surprisals.seq_idx[first_seen_step == -1]
+        neighborhood_surprisals = compute_aggregated_surprisals(
+            surprisals=surprisals,
+            embeddings=embeddings,
+            neighbor_set_ids=neighbor_set_ids,
+            top_k=top_k,
+        )
 
     # Average the surprisals within each macro-batch.
     n_steps = len(neighborhood_surprisals.step)
@@ -198,17 +202,27 @@ def compute_generalization_profile(
     )
     _, counts = np.unique(target_index, return_counts=True)
     for step_i in range(len(neighborhood_surprisals.step)):
-        np.add.at(agg_surprisals[step_i], target_index, surprisals.values[step_i])
+        np.add.at(
+            agg_surprisals[step_i],
+            target_index,
+            neighborhood_surprisals.values[step_i],
+        )
     agg_surprisals /= counts[None, :]
 
-    # agg_surprisals[i, j] is the surprisal at step i for samples first treated at step j
-    # We want Y[c, g] - Y[g - 1, g] - (Y[c, 0] - Y[g - 1, 0])
+    # agg_surprisals[i, j] is the surprisal
+    # at model checkpoint i for samples first treated at step j
+    # (in terms of macro-batches i and j)
 
     profile = np.zeros((n_steps, n_steps - 1))
     y = agg_surprisals
     for c in range(n_steps):
         for g in range(1, n_steps):
-            profile[c, g - 1] = (y[c, g] - y[g - 1, g]) - (y[c, 0] - y[g - 1, 0])
+            if g <= c:
+                profile[c, g - 1] = (
+                    (y[c, g] - y[g - 1, g]) - (y[c, 0] - y[g - 1, 0])
+                )
+            else:
+                profile[c, g - 1] = np.nan
 
     return profile
 
