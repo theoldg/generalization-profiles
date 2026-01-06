@@ -12,16 +12,9 @@ from generalization_profiles import compute_profiles, embeddings, pythia_model
 def transform_matrix_for_plotting(data: np.ndarray, power: float = 1.2):
     # Try spinning, that's a good trick.
     data = -data[1:, 1:].T[::-1]
-
-    # Arbitrary scaling to make the colors look nicer.
-    mean_val = data[~np.isnan(data)].mean()
-    if mean_val != 0:
-        data /= mean_val
-
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        data = data**power
-
+        data = data ** power
     return data
 
 

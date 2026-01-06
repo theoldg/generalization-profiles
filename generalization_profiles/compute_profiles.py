@@ -7,6 +7,7 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm.auto import tqdm
 
+from generalization_profiles import pythia_facts
 from generalization_profiles.embeddings import Embeddings
 
 
@@ -103,6 +104,8 @@ def _to_dataframe(data: datasets.Dataset) -> pd.DataFrame:
 
 def _load_surprisals_single(data: datasets.Dataset) -> Surprisals:
     df = _to_dataframe(data)
+    max_seq_idx = pythia_facts.DEDUP_SECOND_EPOCH_START * pythia_facts.BATCH_SIZE
+    df = df.loc[df.seq_idx < max_seq_idx]
     df = df.sort_values(by=['step', 'seq_idx'])
     steps = []
     values = []
@@ -166,9 +169,6 @@ def compute_generalization_profile(
     macro_batching_factor: int = 5,
     memorization_only: bool = False,
 ) -> np.ndarray:
-    checkpoint_interval = 1000
-    pythia_batch_size = 1024
-
     # For each seq_idx, the first checkpoint that has seen this sample
     # in training - rounded up according to macro_batching_factor.
     # The validation samples get a value of -1.
@@ -177,18 +177,17 @@ def compute_generalization_profile(
             np.floor(
                 surprisals.seq_idx
                 / (
-                    pythia_batch_size
+                    pythia_facts.BATCH_SIZE
+                    * pythia_facts.CHECKPOINT_INTERVAL
                     * macro_batching_factor
-                    * checkpoint_interval
                 )
             ).astype(int)
             + 1
         )
-        * checkpoint_interval
+        * pythia_facts.CHECKPOINT_INTERVAL
         * macro_batching_factor
     )
     first_seen_step[first_seen_step <= 0] = -1
-    first_seen_step[first_seen_step > surprisals.step.max()] = -1
 
     surprisals = Surprisals(
         step=surprisals.step[::macro_batching_factor],
@@ -208,13 +207,13 @@ def compute_generalization_profile(
         )
 
     # Average the surprisals within each macro-batch.
-    n_steps = len(neighborhood_surprisals.step)
-    agg_surprisals = np.zeros((n_steps, n_steps))
     target_index = np.abs(first_seen_step) // (
-        macro_batching_factor * checkpoint_interval
+        macro_batching_factor * pythia_facts.CHECKPOINT_INTERVAL
     )
     _, counts = np.unique(target_index, return_counts=True)
-    for step_i in range(len(neighborhood_surprisals.step)):
+    n_steps = len(counts + 1)
+    agg_surprisals = np.zeros((n_steps, n_steps))
+    for step_i in range(n_steps):
         np.add.at(
             agg_surprisals[step_i],
             target_index,

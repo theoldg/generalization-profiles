@@ -9,6 +9,7 @@ from sentence_transformers import SentenceTransformer
 from tqdm.auto import tqdm
 
 from generalization_profiles.pythia_model import PythiaModel
+from generalization_profiles import pythia_facts
 
 CACHE_LOCATION = Path('cache/embeddings')
 ALIBABA_MODEL = 'Alibaba-NLP/gte-multilingual-base'
@@ -110,9 +111,16 @@ class Embeddings:
 def load_from_cache(model: str) -> Embeddings:
     cache_location = (CACHE_LOCATION / 'numpy' / model).with_suffix('.npz')
     data = np.load(cache_location)
+    seq_idx = data['seq_idx']
+    values = data['values']
+    
+    max_seq_idx = pythia_facts.DEDUP_SECOND_EPOCH_START * pythia_facts.BATCH_SIZE
+    values = values[seq_idx < max_seq_idx]
+    seq_idx = seq_idx[seq_idx < max_seq_idx]
+
     return Embeddings(
-        values=data['values'],
-        seq_idx=data['seq_idx'],
+        values=values,
+        seq_idx=seq_idx,
     )
 
 
