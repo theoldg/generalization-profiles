@@ -57,13 +57,11 @@ def find_all_neighbors(
     batch_size: int = 1024,
     verbose: bool = True,
 ) -> Neighbors:
-    finder = NeighborFinder(
-        embeddings=embeddings, neighbor_set_ids=neighbor_set_ids
-    )
+    finder = NeighborFinder(embeddings=embeddings, neighbor_set_ids=neighbor_set_ids)
     chunks: list[Neighbors] = []
     for i in tqdm(
         range(0, len(embeddings), batch_size),
-        desc='Finding neighbors',
+        desc="Finding neighbors",
         disable=not verbose,
     ):
         id_chunk = embeddings.seq_idx[i : i + batch_size]
@@ -72,9 +70,7 @@ def find_all_neighbors(
     return Neighbors(
         seq_idx=np.concatenate([n.seq_idx for n in chunks]),
         neighbor_idx=np.concatenate([n.neighbor_idx for n in chunks], axis=0),
-        cosine_similarity=np.concatenate(
-            [n.cosine_similarity for n in chunks], axis=0
-        ),
+        cosine_similarity=np.concatenate([n.cosine_similarity for n in chunks], axis=0),
     )
 
 
@@ -99,23 +95,23 @@ class Surprisals:
 @typing.no_type_check
 def _to_dataframe(data: datasets.Dataset) -> pd.DataFrame:
     # Not sure how this works but it's way faster than `pd.DataFrame(data)`
-    return data.with_format('pandas')[:]
+    return data.with_format("pandas")[:]
 
 
 def _load_surprisals_single(data: datasets.Dataset) -> Surprisals:
     df = _to_dataframe(data)
     max_seq_idx = pythia_facts.DEDUP_SECOND_EPOCH_START * pythia_facts.BATCH_SIZE
     df = df.loc[df.seq_idx < max_seq_idx]
-    df = df.sort_values(by=['step', 'seq_idx'])
+    df = df.sort_values(by=["step", "seq_idx"])
     steps = []
     values = []
     seq_idx: np.ndarray | None = None
-    for step, values_at_step in df.groupby('step', sort=False):
+    for step, values_at_step in df.groupby("step", sort=False):
         steps.append(step)
-        values.append(values_at_step['sup_seq'].values)
+        values.append(values_at_step["sup_seq"].values)
 
         # Make sure the seq_idx are the same for every step
-        current_seq_idx = np.array(values_at_step['seq_idx'].values)
+        current_seq_idx = np.array(values_at_step["seq_idx"].values)
         if seq_idx is None:
             seq_idx = current_seq_idx
         else:
@@ -123,14 +119,12 @@ def _load_surprisals_single(data: datasets.Dataset) -> Surprisals:
 
     assert seq_idx is not None
 
-    return Surprisals(
-        step=np.array(steps), seq_idx=seq_idx, values=np.stack(values)
-    )
+    return Surprisals(step=np.array(steps), seq_idx=seq_idx, values=np.stack(values))
 
 
 @typing.no_type_check
 def load_surprisals() -> dict[str, Surprisals]:
-    dataset = datasets.load_dataset('pietrolesci/pythia-deduped-stats')
+    dataset = datasets.load_dataset("pietrolesci/pythia-deduped-stats")
     return {
         model_name: _load_surprisals_single(data)
         for model_name, data in dataset.items()
@@ -162,13 +156,19 @@ def compute_aggregated_surprisals(
     )
 
 
+@dataclass
+class Profile:
+    values: np.ndarray
+    variance: np.ndarray
+
+
 def compute_generalization_profile(
     surprisals: Surprisals,
     embeddings: Embeddings,
     top_k: int,
     macro_batching_factor: int = 5,
     memorization_only: bool = False,
-) -> np.ndarray:
+) -> Profile:
     # For each seq_idx, the first checkpoint that has seen this sample
     # in training - rounded up according to macro_batching_factor.
     # The validation samples get a value of -1.
@@ -206,8 +206,6 @@ def compute_generalization_profile(
             top_k=top_k,
         )
 
-    ## Average the surprisals within each macro-batch.
-
     # Shape: (n_samples,). If the sample is from the validation
     # set, this value is 0. Otherwise it is 1, 2, 3...
     macro_batch_index = np.abs(first_seen_step) // (
@@ -215,29 +213,32 @@ def compute_generalization_profile(
     )
     n_macro_batches = len(set(macro_batch_index)) - 1
 
-    # Shape: (n_macro_bacthes + 1,)
-    # Number of samples in each macro-batch, and one entry for the valid set.
-    _, counts = np.unique(macro_batch_index, return_counts=True)
-
     agg_surprisals = np.zeros((n_macro_batches + 1, n_macro_batches + 1))
-    for step_i in range(n_macro_batches + 1):
-        np.add.at(
-            agg_surprisals[step_i],
-            macro_batch_index,
-            neighborhood_surprisals.values[step_i],
-        )
-    agg_surprisals /= counts[None, :]
+    agg_surprisals_var = np.zeros_like(agg_surprisals)
+    # mbi stands for macro batch index, and mbi=0 is the validation set.
+    for treatment_mbi in range(n_macro_batches + 1):
+        for checkpoint_mbi in range(n_macro_batches + 1):
+            relevant_surprisals = neighborhood_surprisals.values[
+                checkpoint_mbi, macro_batch_index == treatment_mbi
+            ]
+            agg_surprisals[checkpoint_mbi, treatment_mbi] = relevant_surprisals.mean()
+            agg_surprisals_var[checkpoint_mbi, treatment_mbi] = (
+                relevant_surprisals.var()
+            )
 
     # agg_surprisals[i, j] is the surprisal
     # at model checkpoint i for samples first treated at step j
     # (in terms of macro-batches i and j)
 
-    profile = np.zeros((n_macro_batches + 1, n_macro_batches))
+    profile = np.zeros((n_macro_batches, n_macro_batches))
+    profile_var = np.zeros_like(profile)
     y = agg_surprisals
-    for c in range(n_macro_batches + 1):
+    y_var = agg_surprisals_var
+    for c in range(1, n_macro_batches + 1):
         for g in range(1, n_macro_batches + 1):
-            profile[c, g - 1] = (y[c, g] - y[g - 1, g]) - (
-                y[c, 0] - y[g - 1, 0]
+            # Straight from the paper.
+            profile[g - 1, c - 1] = (y[c, g] - y[g - 1, g]) - (y[c, 0] - y[g - 1, 0])
+            profile_var[g - 1, c - 1] = (
+                y_var[c, g] + y_var[g - 1, g] + y_var[c, 0] + y_var[g - 1, 0]
             )
-
-    return profile
+    return Profile(values=profile, variance=profile_var)

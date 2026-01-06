@@ -9,17 +9,9 @@ from tqdm.auto import tqdm
 from generalization_profiles import compute_profiles, embeddings, pythia_model
 
 
-def transform_matrix_for_plotting(data: np.ndarray, power: float = 1.2):
-    # Try spinning, that's a good trick.
-    data = -data[1:, 1:].T[::-1]
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        data = data ** power
-    return data
-
-
-def plot_matrix_on_ax(data, ax, palette='Reds'):
+def plot_profile_on_ax(data, ax, palette='Reds'):
     """Helper to plot on a specific matplotlib axis"""
+    data = -data[1:][::-1]
     ax.imshow(data, cmap=palette, aspect='auto')
     ax.tick_params(
         left=False,
@@ -32,7 +24,7 @@ def plot_matrix_on_ax(data, ax, palette='Reds'):
 
 
 def main(
-    macro_bacthing_factor: int = 2,
+    macro_batching_factor: int = 2,
     color_scaling_power: float = 1.2,
     k_vals: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64, 128),
     embeddings_name: str = embeddings.ALIBABA_MODEL,
@@ -63,13 +55,10 @@ def main(
                 embeddings=embd,
                 top_k=1,
                 memorization_only=True,
-                macro_batching_factor=macro_bacthing_factor,
+                macro_batching_factor=macro_batching_factor,
             )
             pbar.update()
-            mem_data = transform_matrix_for_plotting(
-                mem_data, power=color_scaling_power
-            )
-            plot_matrix_on_ax(mem_data, ax_mem, palette='Blues')
+            plot_profile_on_ax(mem_data, ax_mem, palette='Blues')
             ax_mem.set_ylabel(model, fontsize=12, fontweight='bold')  # type: ignore
             for col_idx, k in enumerate(k_vals):
                 ax_k = axes[row_idx, col_idx + 1]
@@ -77,14 +66,11 @@ def main(
                     surprisals=surprisals,
                     embeddings=embd,
                     top_k=k,
-                    macro_batching_factor=macro_bacthing_factor,
+                    macro_batching_factor=macro_batching_factor,
                     memorization_only=False,
                 )
                 pbar.update()
-                k_data = transform_matrix_for_plotting(
-                    k_data, power=color_scaling_power
-                )
-                plot_matrix_on_ax(k_data, ax_k, palette='Reds')
+                plot_profile_on_ax(k_data, ax_k, palette='Reds')
 
     axes[0, 0].set_title('Memorization')  # type: ignore
     for col_idx, k in enumerate(k_vals):
