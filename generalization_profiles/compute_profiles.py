@@ -206,17 +206,24 @@ def compute_generalization_profile(
             top_k=top_k,
         )
 
-    # Average the surprisals within each macro-batch.
-    target_index = np.abs(first_seen_step) // (
+    ## Average the surprisals within each macro-batch.
+
+    # Shape: (n_samples,). If the sample is from the validation
+    # set, this value is 0. Otherwise it is 1, 2, 3...
+    macro_batch_index = np.abs(first_seen_step) // (
         macro_batching_factor * pythia_facts.CHECKPOINT_INTERVAL
     )
-    _, counts = np.unique(target_index, return_counts=True)
-    n_steps = len(counts + 1)
-    agg_surprisals = np.zeros((n_steps, n_steps))
-    for step_i in range(n_steps):
+    n_macro_batches = len(set(macro_batch_index)) - 1
+
+    # Shape: (n_macro_bacthes + 1,)
+    # Number of samples in each macro-batch, and one entry for the valid set.
+    _, counts = np.unique(macro_batch_index, return_counts=True)
+
+    agg_surprisals = np.zeros((n_macro_batches + 1, n_macro_batches + 1))
+    for step_i in range(n_macro_batches + 1):
         np.add.at(
             agg_surprisals[step_i],
-            target_index,
+            macro_batch_index,
             neighborhood_surprisals.values[step_i],
         )
     agg_surprisals /= counts[None, :]
@@ -225,15 +232,12 @@ def compute_generalization_profile(
     # at model checkpoint i for samples first treated at step j
     # (in terms of macro-batches i and j)
 
-    profile = np.zeros((n_steps, n_steps - 1))
+    profile = np.zeros((n_macro_batches + 1, n_macro_batches))
     y = agg_surprisals
-    for c in range(n_steps):
-        for g in range(1, n_steps):
-            if g <= c:
-                profile[c, g - 1] = (y[c, g] - y[g - 1, g]) - (
-                    y[c, 0] - y[g - 1, 0]
-                )
-            else:
-                profile[c, g - 1] = np.nan
+    for c in range(n_macro_batches + 1):
+        for g in range(1, n_macro_batches + 1):
+            profile[c, g - 1] = (y[c, g] - y[g - 1, g]) - (
+                y[c, 0] - y[g - 1, 0]
+            )
 
     return profile
