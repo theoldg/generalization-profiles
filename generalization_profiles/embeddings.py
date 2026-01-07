@@ -108,7 +108,7 @@ class Embeddings:
         return len(self.seq_idx)
 
 
-def load_from_cache(model: str) -> Embeddings:
+def load_embeddings_from_cache(model: str) -> Embeddings:
     cache_location = (CACHE_LOCATION / 'numpy' / model).with_suffix('.npz')
     data = np.load(cache_location)
     seq_idx = data['seq_idx']

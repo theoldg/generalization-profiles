@@ -213,32 +213,20 @@ def compute_generalization_profile(
     )
     n_macro_batches = len(set(macro_batch_index)) - 1
 
-    agg_surprisals = np.zeros((n_macro_batches + 1, n_macro_batches + 1))
-    agg_surprisals_var = np.zeros_like(agg_surprisals)
-    # mbi stands for macro batch index, and mbi=0 is the validation set.
-    for treatment_mbi in range(n_macro_batches + 1):
-        for checkpoint_mbi in range(n_macro_batches + 1):
-            relevant_surprisals = neighborhood_surprisals.values[
-                checkpoint_mbi, macro_batch_index == treatment_mbi
-            ]
-            agg_surprisals[checkpoint_mbi, treatment_mbi] = relevant_surprisals.mean()
-            agg_surprisals_var[checkpoint_mbi, treatment_mbi] = (
-                relevant_surprisals.var()
-            )
-
-    # agg_surprisals[i, j] is the surprisal
-    # at model checkpoint i for samples first treated at step j
-    # (in terms of macro-batches i and j)
-
     profile = np.zeros((n_macro_batches, n_macro_batches))
-    profile_var = np.zeros_like(profile)
-    y = agg_surprisals
-    y_var = agg_surprisals_var
+    variance = np.zeros_like(profile)
+
+    # mbi stands for macro batch index, and mbi=0 is the validation set.
+    s = neighborhood_surprisals.values
     for c in range(1, n_macro_batches + 1):
         for g in range(1, n_macro_batches + 1):
-            # Straight from the paper.
-            profile[g - 1, c - 1] = (y[c, g] - y[g - 1, g]) - (y[c, 0] - y[g - 1, 0])
-            profile_var[g - 1, c - 1] = (
-                y_var[c, g] + y_var[g - 1, g] + y_var[c, 0] + y_var[g - 1, 0]
-            )
-    return Profile(values=profile, variance=profile_var)
+            vals_c_g = s[c][macro_batch_index == g]
+            vals_c_valid = s[c][macro_batch_index == 0]
+            vals_g1_g = s[g - 1][macro_batch_index == g]
+            vals_g1_valid = s[g - 1][macro_batch_index == 0]
+
+            profile[c - 1, g - 1] = (vals_c_g - vals_g1_g).mean() - (vals_c_valid - vals_g1_valid).mean()
+            # TODO: wrong
+            variance[c - 1, g - 1] = (vals_c_g - vals_g1_g).var() + (vals_c_valid - vals_g1_valid).var()
+
+    return Profile(values=profile, variance=variance)
