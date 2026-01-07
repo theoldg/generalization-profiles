@@ -3,19 +3,7 @@ from typing import Self
 
 from transformers import AutoTokenizer, GPTNeoXForCausalLM
 
-MODEL_VARIANTS: list[str] = [
-    '70m',
-    '160m',
-    '410m',
-    '1.4b',
-    '2.8b',
-    '6.9b',
-    '12b',
-]
-
-# Valid revisions are 0, 1000, 2000, ..., 143000 for all models.
-VALID_REVISIONS: set[int] = {step for step in range(0, 144000, 1000)}
-
+from generalization_profiles.pythia_facts import MODEL_VARIANTS, VALID_REVISIONS
 
 class PythiaModel:
     model: GPTNeoXForCausalLM

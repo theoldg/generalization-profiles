@@ -1,12 +1,16 @@
 from dataclasses import dataclass
 from functools import cache
 import typing
+import warnings
 
 import datasets
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-from differences import ATTgt
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources is deprecated.*")
+    from differences import ATTgt
 
 from generalization_profiles import pythia_facts
 from generalization_profiles.embeddings import (
@@ -32,8 +36,8 @@ class Profile:
     values: np.ndarray
 
     # Shape: (n_macro_batches, n_macro_batches)
-    # variance[i, j] is the variance for values[i, j].
-    variance: np.ndarray
+    # std[i, j] is the standard deviation for values[i, j].
+    std: np.ndarray
 
 
 @dataclass
@@ -100,74 +104,62 @@ def _load_surprisals_for_variant(model_variant: str) -> Surprisals:
 
 def _compute_profile_from_surprisals(
     surprisals: Surprisals,
+    macro_batching_factor: int,
 ) -> Profile:
     """
-    Computes the memorization/generalization profile using the Callaway-Sant'Anna 
-    Difference-in-Differences estimator via the 'differences' package.
+    Computes the DiD using `differences`.
     """
-    # 1. Convert Surprisals matrix to a long-form DataFrame
-    # surprisals.values shape: (n_steps, n_samples)
-    n_steps, n_samples = surprisals.values.shape
-    
-    # Flatten the values and create corresponding index arrays
-    flat_values = surprisals.values.flatten()
-    step_indices = np.repeat(surprisals.step, n_samples)
-    seq_indices = np.tile(surprisals.seq_idx, n_steps)
-
-    df = pd.DataFrame({
-        "step": step_indices,
-        "seq_idx": seq_indices,
-        "surprisal": flat_values
-    })
-
-    # 2. Assign Cohorts
-    # Following compute_attgt.py logic: 
-    # seq_idx > 0 are treated units. Their 'cohort' is the step they enter training.
-    # In this context, we treat the 'seq_idx' as the indicator of which macro-batch 
-    # the sample belongs to.
-    
-    # Define a mapping or logic for cohorts. 
-    # If seq_idx corresponds to the training step directly:
-    df["cohort"] = np.where(df["seq_idx"] > 0, df["seq_idx"], np.nan)
-    
-    # 3. Fit the Diff-in-Diff Model
-    # We use 'seq_idx' as the unit (individual sample) and 'step' as time.
-    att_model = ATTgt(
-        data=df.set_index(["seq_idx", "step"]), 
-        cohort_name="cohort"
+    # Adapt surprisals to expected format.
+    df_data = {"step": [], "seq_idx": [], "surprisal": []}
+    for (step_index, seq_idx_index), surprisal in np.ndenumerate(surprisals.values):
+        df_data["step"].append(surprisals.step[step_index])
+        df_data["seq_idx"].append(surprisals.seq_idx[seq_idx_index])
+        df_data["surprisal"].append(surprisal)
+    df = pd.DataFrame(df_data)
+    macro_batch_size = (
+        pythia_facts.BATCH_SIZE
+        * pythia_facts.CHECKPOINT_INTERVAL
+        * macro_batching_factor
     )
-    
-    # We use 'dr' (doubly robust) and 'never_treated' (seq_idx <= 0) as control
+    # The cohort is the macro batch index (and NaN for validation samples).
+    df["cohort"] = np.where(
+        df["seq_idx"] > 0,
+        1 + df["seq_idx"] // macro_batch_size,
+        np.nan,
+    )
+    att_model = ATTgt(data=df.set_index(["seq_idx", "step"]), cohort_name="cohort")
     att_results = att_model.fit(
-        target_col="surprisal",
+        "surprisal",
         est_method="dr",
         control_group="never_treated",
-        n_jobs=-1 # Use all available cores
+        # n_jobs=-1,
     )
 
-    # 4. Extract results into Profile
-    # att_results typically contains (cohort, time) as indices.
-    # We need to map these back to the grid defined by our macro-batches.
-    
-    # Pivot results to get the (n_macro_batches, n_macro_batches) shape
-    # Values: ATT(g, t)
-    # Variance: (Standard Error)^2
+    att_results.columns = att_results.columns.droplevel([0, 1])
     res_df = att_results.reset_index()
-    
-    # Ensure we only include steps and cohorts present in our macro-batched surprisals
-    pivot_values = res_df.pivot(index="cohort", columns="step", values=("point_estimate", "surprisal"))
-    pivot_std = res_df.pivot(index="cohort", columns="step", values=("standard_error", "surprisal"))
 
-    # Clean up column/index levels from pivot
-    pivot_values.columns = pivot_values.columns.droplevel(0)
-    pivot_std.columns = pivot_std.columns.droplevel(0)
+    return res_df
+
+    pivot_values = res_df.pivot(index="cohort", columns="time", values="ATT")
+    pivot_std = res_df.pivot(index="cohort", columns="time", values="std_error")
+
+    # 6. Reindex to ensure the matrix is square and aligned with surprisals.step
+    # Some (cohort, time) pairs might be missing or NaN (e.g., pre-treatment)
+    full_index = surprisals.step[surprisals.step > 0] # Training steps
+    
+    # Reindex and fill with 0 or NaN as appropriate for your profile
+    pivot_values = pivot_values.reindex(index=full_index, columns=surprisals.step).to_numpy()
+    pivot_std = np.square(
+        pivot_std.reindex(index=full_index, columns=surprisals.step).to_numpy()
+    )
 
     return Profile(
         n_macro_batches=len(surprisals.step),
         step=surprisals.step,
-        values=pivot_values.to_numpy(),
-        variance=np.square(pivot_std.to_numpy())
+        values=pivot_values,
+        std=pivot_std
     )
+
 def _macro_batch(
     surprisals: Surprisals,
     macro_batching_factor: int,
@@ -213,7 +205,7 @@ def compute_memorization_profile(
 ) -> Profile:
     surprisals = _load_surprisals_for_variant(model_variant)
     surprisals = _macro_batch(surprisals, macro_batching_factor)
-    return _compute_profile_from_surprisals(surprisals)
+    return _compute_profile_from_surprisals(surprisals, macro_batching_factor)
 
 
 def compute_generalization_profile(
@@ -226,7 +218,7 @@ def compute_generalization_profile(
     surprisals = _macro_batch(surprisals, macro_batching_factor)
     embeddings = load_embeddings_from_cache(embedding_model)
     surprisals = _aggregate_surprisals_over_neighborhoods(surprisals, embeddings, top_k)
-    return _compute_profile_from_surprisals(surprisals)
+    return _compute_profile_from_surprisals(surprisals, macro_batching_factor)
 
 
 if __name__ == "__main__":
