@@ -1,6 +1,8 @@
 # Only way I found to silence warnings when importing `differences`.
 import os
+import warnings
 
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*")
 os.environ["PYTHONWARNINGS"] = (
     "ignore:pkg_resources is deprecated:UserWarning:property_cached,"
 )
@@ -40,7 +42,7 @@ class Profile:
 
     # Shape: (n_macro_batches, n_macro_batches)
     # std[i, j] is the standard deviation for values[i, j].
-    std: np.ndarray
+    std_error: np.ndarray
 
 
 @dataclass
@@ -117,15 +119,20 @@ def _compute_profile_from_surprisals(
         df_data["seq_idx"].append(surprisals.seq_idx[seq_idx_index])
         df_data["surprisal"].append(surprisal)
     df = pd.DataFrame(df_data)
+
+    # The cohort is the macro batch index (and NaN for validation samples).
     macro_batch_size = (
         pythia.BATCH_SIZE * pythia.CHECKPOINT_INTERVAL * macro_batching_factor
     )
-    # The cohort is the macro batch index (and NaN for validation samples).
-    df["cohort"] = np.where(
-        df["seq_idx"] > 0,
-        1 + df["seq_idx"] // macro_batch_size,
-        np.nan,
-    )
+
+    df["cohort"] = (
+        (1 + df["seq_idx"] // macro_batch_size).astype(int)
+        * pythia.CHECKPOINT_INTERVAL
+        * macro_batching_factor
+    ).astype(int)
+
+    df.loc[df["cohort"] <= 0, "cohort"] = np.nan
+
     att_model = ATTgt(data=df.set_index(["seq_idx", "step"]), cohort_name="cohort")
     att_results = att_model.fit(
         "surprisal",
@@ -134,27 +141,28 @@ def _compute_profile_from_surprisals(
         n_jobs=-1,
     )
 
-    print(att_results.columns)
-
     att_results.columns = att_results.columns.droplevel([0, 1])
     res_df = att_results.reset_index()
     num_macro_batches = len(surprisals.step)
-    time_vals = sorted(att_results["time"].unique())
+
+    time_vals = sorted(res_df["time"].unique())
     time_to_index = {t: i for i, t in enumerate(time_vals)}
+    cohorts = sorted(res_df["cohort"].unique())
+    cohort_to_index = {c: i for i, c in enumerate(cohorts)}
 
     profile = np.zeros((num_macro_batches, num_macro_batches)) * np.nan
-    std = np.copy(profile)
+    std_error = np.copy(profile)
     for _, r in res_df.iterrows():
         time_index = time_to_index[r["time"]]
-        cohort_index = r["cohort"] - 1
-        profile[time_index, cohort_index] = -r["ATT"]
-        std[time_index, cohort_index] = r["std_error"]
+        cohort_index = cohort_to_index[r["cohort"]]
+        profile[time_index, cohort_index] = r["ATT"]
+        std_error[time_index, cohort_index] = r["std_error"]
 
     return Profile(
         n_macro_batches=len(surprisals.step),
         step=surprisals.step,
         values=profile,
-        std=std,
+        std_error=std_error,
     )
 
 
