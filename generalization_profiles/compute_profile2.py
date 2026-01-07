@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tqdm.auto import tqdm
 
 from generalization_profiles import pythia_facts
-from generalization_profiles.embeddings import Embeddings, load_embeddings_from_cache
+from generalization_profiles.embeddings import Embeddings, load_embeddings_from_cache, ALIBABA_MODEL
 
 
 @dataclass
@@ -45,6 +45,17 @@ class Surprisals:
     # Shape: (n steps, n samples)
     values: np.ndarray
 
+    def __post_init__(self):
+        m = {id: i for i, id in enumerate(self.seq_idx)}
+        self._idx_map = np.vectorize(m.__getitem__)
+
+    def seq_idx_to_data_idx(self, seq_idx: np.ndarray) -> np.ndarray:
+        """
+        If sample with seq_idx=123 is stored at index 7 in values,
+        then seq_idx_to_data_idx(123) = 7
+        """
+        return self._idx_map(seq_idx)
+
 
 @typing.no_type_check
 @cache
@@ -72,7 +83,7 @@ def _load_surprisals_for_variant(model_variant: str) -> Surprisals:
         steps.append(step)
         values.append(values_at_step["sup_seq"].values)
 
-        # Make sure the seq_idx are the same for every step
+        # Everything is lined up: the array seq_idx is the same at every step.
         current_seq_idx = np.array(values_at_step["seq_idx"].values)
         if seq_idx is None:
             seq_idx = current_seq_idx
@@ -87,6 +98,7 @@ def _compute_profile_from_surprisals(
     surprisals: Surprisals,
 ) -> Profile:
     ...
+
 
 def _macro_batch(
         surprisals: Surprisals,
@@ -104,9 +116,29 @@ def _aggregate_surprisals_over_neighborhoods(
         embeddings: Embeddings,
         top_k: int,
 ) -> Surprisals:
-    ...
+    validation_idx = surprisals.seq_idx[surprisals.seq_idx < 0]
+    validation_embeddings = embeddings[validation_idx]
+    all_embeddings = embeddings[surprisals.seq_idx]
 
+    # If we increase the data size, this will have to be batched.
+    similarities = cosine_similarity(all_embeddings, validation_embeddings)
 
+    top_args = np.argpartition(similarities, -top_k, axis=1)[:, -top_k:]
+    neighbor_idx = validation_idx[top_args]
+    
+    aggregated_values = np.take(
+            surprisals.values,
+            surprisals.seq_idx_to_data_idx(neighbor_idx),
+            axis=1,
+    ).mean(-1)
+
+    return Surprisals(
+        step=surprisals.step,
+        seq_idx=surprisals.seq_idx,
+        values=aggregated_values,
+    )
+    
+    
 def compute_memorization_profile(
     model_variant: str,
     macro_batching_factor: int,
@@ -115,13 +147,23 @@ def compute_memorization_profile(
     surprisals = _macro_batch(surprisals, macro_batching_factor)
     return _compute_profile_from_surprisals(surprisals)
 
+
 def compute_generalization_profile(
     model_variant: str,
     macro_batching_factor: int,
     top_k: int,
+    embedding_model: str = ALIBABA_MODEL,
 ) -> Profile:
     surprisals = _load_surprisals_for_variant(model_variant)
     surprisals = _macro_batch(surprisals, macro_batching_factor)
-    embeddings = load_embeddings_from_cache(model_variant)
+    embeddings = load_embeddings_from_cache(ALIBABA_MODEL)
     surprisals = _aggregate_surprisals_over_neighborhoods(surprisals, embeddings, top_k)
     return _compute_profile_from_surprisals(surprisals)
+
+
+if __name__ == '__main__':
+    compute_generalization_profile(
+        model_variant='70m',
+        macro_batching_factor=10,
+        top_k=8,
+    )
