@@ -19,7 +19,7 @@ VALID_REVISIONS: set[int] = {step for step in range(0, 144000, 1000)}
 
 # For the deduped models, the first step which started seeing repeated data.
 # https://github.com/EleutherAI/pythia/issues/144
-FIRST_STEP_OF_SECOND_EPOCH = 99_000
+FIRST_STEP_OF_SECOND_EPOCH = 95_000
 
 BATCH_SIZE = 1024
 

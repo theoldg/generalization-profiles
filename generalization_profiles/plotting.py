@@ -3,27 +3,27 @@ import numpy as np
 
 from generalization_profiles.compute_profile import Profile
 
-
-def plot_profile(profile):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 10))
-
-    def render_matrix(ax, matrix_data, title):
-        data = matrix_data[1:-1, 1:-1].T[::-1]
-        
-        # Calculate symmetrical limits so 0 is always the center (white)
-        limit = np.max(np.abs(data))
-        
-        # 'RdBu_r' gives Red for negative, Blue for positive
-        im = ax.imshow(data, cmap='RdBu_r', vmin=-limit, vmax=limit)
-        
-        fig.colorbar(im, ax=ax)
-        ax.set_title(title)
-        
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    render_matrix(ax1, -profile.values, "Profile")
-    render_matrix(ax2, profile.std_error, "Standard Deviation")
-
+# very llm generated
+def plot_profile(profile: Profile, threshold=1.96):
+    """
+    Plots a single memorization profile, masking non-significant values.
+    
+    Args:
+        profile: The Profile dataclass containing 'values' (ATT) and 'std' (error).
+        threshold: The critical value for significance (1.96 = 95% confidence).
+    """
+    plt.figure(figsize=(10, 8))
+    def crop_flip(x):
+        return x[1:, 1:].T[::-1]
+    data = crop_flip(profile.values)
+    err = crop_flip(profile.std_error)
+    sig_mask = np.abs(data) > (threshold * err)
+    plot_data = np.where(sig_mask, -data, np.nan) 
+    limit = np.nanmax(np.abs(plot_data)) if not np.all(np.isnan(plot_data)) else 0.1
+    im = plt.imshow(plot_data, cmap='RdBu_r', vmin=-limit, vmax=limit)
+    plt.colorbar(im, label="Memorization (Δ Log-Likelihood)")
+    plt.title(f"Memorization Profile (Significant at z > {threshold})")
+    plt.xlabel("Checkpoint Step")
+    plt.ylabel("Treatment Step")
     plt.tight_layout()
     plt.show()
