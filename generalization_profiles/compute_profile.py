@@ -1,18 +1,21 @@
+# Only way I found to silence warnings when importing `differences`.
+import os
+
+os.environ["PYTHONWARNINGS"] = (
+    "ignore:pkg_resources is deprecated:UserWarning:property_cached,"
+)
+
 from dataclasses import dataclass
 from functools import cache
 import typing
-import warnings
 
 import datasets
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
+from differences import ATTgt
 
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources is deprecated.*")
-    from differences import ATTgt
-
-from generalization_profiles import pythia_facts
+from generalization_profiles import pythia
 from generalization_profiles.embeddings import (
     Embeddings,
     load_embeddings_from_cache,
@@ -67,21 +70,19 @@ class Surprisals:
 
 @typing.no_type_check
 @cache
-def _load_dataset() -> dict[str, datasets.Dataset]:
-    return datasets.load_dataset("pietrolesci/pythia-deduped-stats")
-
-
-@typing.no_type_check
-def _to_dataframe(data: datasets.Dataset) -> pd.DataFrame:
-    # Not sure how/why this works but it's way faster than `pd.DataFrame(data)`
-    return data.with_format("pandas")[:]
+def _load_dataset() -> dict[str, pd.DataFrame]:
+    return {
+        name: data.with_format("pandas")[:]
+        for name, data in datasets.load_dataset(
+            "pietrolesci/pythia-deduped-stats"
+        ).items()
+    }
 
 
 def _load_surprisals_for_variant(model_variant: str) -> Surprisals:
-    data = _load_dataset()[model_variant]
-    df = _to_dataframe(data)
-
-    df = df.loc[df.seq_idx < pythia_facts.FIRST_REPEATED_SEQ_IDX]
+    df = _load_dataset()[model_variant]
+    df = df.loc[df.seq_idx < pythia.FIRST_REPEATED_SEQ_IDX]
+    df = df.loc[df.step < pythia.FIRST_STEP_OF_SECOND_EPOCH]
     df = df.sort_values(by=["step", "seq_idx"])
 
     steps = []
@@ -117,9 +118,7 @@ def _compute_profile_from_surprisals(
         df_data["surprisal"].append(surprisal)
     df = pd.DataFrame(df_data)
     macro_batch_size = (
-        pythia_facts.BATCH_SIZE
-        * pythia_facts.CHECKPOINT_INTERVAL
-        * macro_batching_factor
+        pythia.BATCH_SIZE * pythia.CHECKPOINT_INTERVAL * macro_batching_factor
     )
     # The cohort is the macro batch index (and NaN for validation samples).
     df["cohort"] = np.where(
@@ -132,38 +131,38 @@ def _compute_profile_from_surprisals(
         "surprisal",
         est_method="dr",
         control_group="never_treated",
-        # n_jobs=-1,
+        n_jobs=-1,
     )
+
+    print(att_results.columns)
 
     att_results.columns = att_results.columns.droplevel([0, 1])
     res_df = att_results.reset_index()
+    num_macro_batches = len(surprisals.step)
+    time_vals = sorted(att_results["time"].unique())
+    time_to_index = {t: i for i, t in enumerate(time_vals)}
 
-    return res_df
-
-    pivot_values = res_df.pivot(index="cohort", columns="time", values="ATT")
-    pivot_std = res_df.pivot(index="cohort", columns="time", values="std_error")
-
-    # 6. Reindex to ensure the matrix is square and aligned with surprisals.step
-    # Some (cohort, time) pairs might be missing or NaN (e.g., pre-treatment)
-    full_index = surprisals.step[surprisals.step > 0] # Training steps
-    
-    # Reindex and fill with 0 or NaN as appropriate for your profile
-    pivot_values = pivot_values.reindex(index=full_index, columns=surprisals.step).to_numpy()
-    pivot_std = np.square(
-        pivot_std.reindex(index=full_index, columns=surprisals.step).to_numpy()
-    )
+    profile = np.zeros((num_macro_batches, num_macro_batches)) * np.nan
+    std = np.copy(profile)
+    for _, r in res_df.iterrows():
+        time_index = time_to_index[r["time"]]
+        cohort_index = r["cohort"] - 1
+        profile[time_index, cohort_index] = -r["ATT"]
+        std[time_index, cohort_index] = r["std_error"]
 
     return Profile(
         n_macro_batches=len(surprisals.step),
         step=surprisals.step,
-        values=pivot_values,
-        std=pivot_std
+        values=profile,
+        std=std,
     )
+
 
 def _macro_batch(
     surprisals: Surprisals,
     macro_batching_factor: int,
 ) -> Surprisals:
+    assert macro_batching_factor > 0
     return Surprisals(
         step=surprisals.step[::macro_batching_factor],
         values=surprisals.values[::macro_batching_factor],
@@ -201,7 +200,7 @@ def _aggregate_surprisals_over_neighborhoods(
 
 def compute_memorization_profile(
     model_variant: str,
-    macro_batching_factor: int,
+    macro_batching_factor: int = 1,
 ) -> Profile:
     surprisals = _load_surprisals_for_variant(model_variant)
     surprisals = _macro_batch(surprisals, macro_batching_factor)
@@ -210,8 +209,8 @@ def compute_memorization_profile(
 
 def compute_generalization_profile(
     model_variant: str,
-    macro_batching_factor: int,
     top_k: int,
+    macro_batching_factor: int = 1,
     embedding_model: str = ALIBABA_MODEL,
 ) -> Profile:
     surprisals = _load_surprisals_for_variant(model_variant)
@@ -222,8 +221,7 @@ def compute_generalization_profile(
 
 
 if __name__ == "__main__":
-    compute_generalization_profile(
+    compute_memorization_profile(
         model_variant="70m",
         macro_batching_factor=10,
-        top_k=8,
     )
