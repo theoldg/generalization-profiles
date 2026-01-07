@@ -27,7 +27,7 @@ from generalization_profiles.embeddings import (
 
 @dataclass
 class Profile:
-    """A memorization of generalization profile."""
+    """A memorization or generalization profile."""
 
     n_macro_batches: int
 
