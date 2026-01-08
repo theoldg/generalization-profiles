@@ -1,3 +1,5 @@
+"""The whole file is AI slop."""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import panel as pn
@@ -8,7 +10,6 @@ import bokeh.plotting
 from generalization_profiles.compute_profile import Profile
 
 
-# very llm generated
 def plot_profile(profile: Profile, threshold=1.96):
     """
     Plots a single profile, masking non-significant values.
