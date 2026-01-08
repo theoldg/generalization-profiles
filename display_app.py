@@ -73,9 +73,8 @@ def create_app():
             
             # Helper to apply sizing to plots
             def format_plot(p):
-                if not isinstance(p, pn.pane.Str):
-                    p.width = 2000   # Set your preferred fixed width
-                    p.height = 2000  # Set your preferred fixed height
+                p.width = 2000   
+                p.height = 2000  
                 return p
 
             # Add MEM plot
@@ -85,10 +84,8 @@ def create_app():
             for k in TOP_K_LIST:
                 model_row.append(format_plot(all_plots[mb][model][k]))
 
-            # We wrap the row in a Row container with horizontal scrolling enabled
-            rows.append(pn.Row(*model_row, scroll=True, width=3600)) # width controls the "viewport"
+            rows.append(pn.Row(*model_row, scroll=True, width=3600))
         
-        # We wrap the column in a Column container with vertical scrolling enabled
         return pn.Column(*rows, height=2400, scroll=True)
 
     # 4. Layout
