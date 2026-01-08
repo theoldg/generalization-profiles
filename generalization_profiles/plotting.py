@@ -68,8 +68,8 @@ class ProfilePlot(pn.viewable.Viewer):
         self.fig = bokeh.plotting.figure(
             x_range=(0, self.nx),
             y_range=(0, self.ny),
-            x_axis_label="Checkpoint Step",
-            y_axis_label="Treatment Step",
+            # x_axis_label="Checkpoint Step",
+            # y_axis_label="Treatment Step",
             toolbar_location="above",
             sizing_mode="stretch_both",
         )

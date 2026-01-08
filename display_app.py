@@ -6,6 +6,8 @@ from generalization_profiles.plotting import ProfilePlot
 from generalization_profiles.pythia import MODEL_VARIANTS
 
 
+MODEL_VARIANTS.remove('2.8b')
+
 # Constants
 TOP_K_LIST = [1, 2, 4, 8, 16, 32, 64]
 MACRO_BATCH_LIST = [1, 2, 3, 4, 5]
@@ -30,6 +32,8 @@ def create_app():
     for mb in MACRO_BATCH_LIST:
         all_plots[mb] = {}
         for model in MODEL_VARIANTS:
+            
+
             all_plots[mb][model] = {}
             
             # Load Generalization plots
@@ -63,28 +67,35 @@ def create_app():
     def create_grid(mb):
         """Rebuilds the visual grid when macro_batching changes."""
         rows = []
-        # Header Row
-        header = pn.Row(pn.Spacer(width=100), *[pn.pane.Markdown(f"### Top {k}") for k in TOP_K_LIST], pn.pane.Markdown("### Mem"))
-        rows.append(header)
 
-        for model in MODEL_VARIANTS:
+        for i, model in enumerate(MODEL_VARIANTS):
             model_row = [pn.pane.Markdown(f"**{model}**", width=100)]
             
+            # Helper to apply sizing to plots
+            def format_plot(p):
+                if not isinstance(p, pn.pane.Str):
+                    p.width = 2000   # Set your preferred fixed width
+                    p.height = 2000  # Set your preferred fixed height
+                return p
+
             # Add MEM plot
-            model_row.append(all_plots[mb][model]['mem'])
+            model_row.append(format_plot(all_plots[mb][model]['mem']))
 
             # Add GEN plots
             for k in TOP_K_LIST:
-                model_row.append(all_plots[mb][model][k])
+                model_row.append(format_plot(all_plots[mb][model][k]))
 
-            rows.append(pn.Row(*model_row))
+            # We wrap the row in a Row container with horizontal scrolling enabled
+            rows.append(pn.Row(*model_row, scroll=True, width=3600)) # width controls the "viewport"
         
-        return pn.Column(*rows)
+        # We wrap the column in a Column container with vertical scrolling enabled
+        return pn.Column(*rows, height=2400, scroll=True)
 
     # 4. Layout
     layout = pn.Column(
         pn.Row(mb_input, threshold_slider),
-        create_grid
+        create_grid,
+        sizing_mode='fixed',
     )
     
     return layout
