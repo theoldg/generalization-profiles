@@ -4,14 +4,17 @@ version = "0.1"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "bokeh>=3.8.2",
     "datasets",
     "differences",
     "fire",
     "huggingface-hub",
     "ipywidgets",
     "jupyter",
+    "jupyter-bokeh>=4.0.5",
     "matplotlib",
     "numpy<2.0",
+    "panel>=1.8.5",
     "scikit-learn",
     "sentence-transformers",
     "transformers",
