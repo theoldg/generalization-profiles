@@ -946,6 +946,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "panel" },
+    { name = "pysbd" },
     { name = "scikit-learn" },
     { name = "sentence-transformers" },
     { name = "transformers" },
@@ -964,6 +965,7 @@ requires-dist = [
     { name = "matplotlib" },
     { name = "numpy", specifier = "<2.0" },
     { name = "panel", specifier = ">=1.8.5" },
+    { name = "pysbd", specifier = ">=0.3.4" },
     { name = "scikit-learn" },
     { name = "sentence-transformers" },
     { name = "transformers" },
@@ -2731,6 +2733,14 @@ source = { registry = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-sta
 sdist = { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pyparsing/pyparsing-3.3.1.tar.gz", hash = "sha256:47fad0f17ac1e2cad3de3b458570fbc9b03560aa029ed5e16ee5554da9a2251c" }
 wheels = [
     { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pyparsing/pyparsing-3.3.1-py3-none-any.whl", hash = "sha256:023b5e7e5520ad96642e2c6db4cb683d3970bd640cdf7115049a6e9c3682df82" },
+]
+
+[[package]]
+name = "pysbd"
+version = "0.3.4"
+source = { registry = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+wheels = [
+    { url = "https://us-python.pkg.dev/artifact-foundry-prod/ah-3p-staging-python/pysbd/pysbd-0.3.4-py3-none-any.whl", hash = "sha256:cd838939b7b0b185fcf86b0baf6636667dfb6e474743beeff878e9f42e022953" },
 ]
 
 [[package]]
