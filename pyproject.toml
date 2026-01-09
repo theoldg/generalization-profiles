@@ -15,6 +15,7 @@ dependencies = [
     "matplotlib",
     "numpy<2.0",
     "panel>=1.8.5",
+    "pyahocorasick>=2.3.0",
     "pysbd>=0.3.4",
     "scikit-learn",
     "sentence-transformers",
