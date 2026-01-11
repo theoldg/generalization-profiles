@@ -11,4 +11,5 @@ wheels/
 *.ipynb
 .ruff_cache
 cache
-profiles/
+
+results/

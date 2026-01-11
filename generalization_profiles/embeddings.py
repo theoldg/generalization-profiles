@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import datasets
+import pandas as pd
 import numpy as np
 from fire import Fire
 from sentence_transformers import SentenceTransformer
@@ -138,5 +139,22 @@ def main(model=ALIBABA_MODEL):
     np.savez(numpy_save_path, seq_idx=seq_idx, values=values)
 
 
+def main2(model=ALIBABA_MODEL):
+    data = pd.read_parquet('results/segments_dedup.parquet')
+    samples = [
+        TextSample(
+            value=r.text,
+            seq_idx=f'{r.seq_idx}/{r.start_idx}',
+        )
+        for _, r in tqdm(data.iterrows())
+    ]
+    embeddings = compute_and_cache_embeddings(
+        encoder=SentenceTransformer(model, trust_remote_code=True),
+        cache_location=CACHE_LOCATION / 'segment_embds' / model,
+        data=samples,
+    )
+
+
 if __name__ == '__main__':
-    Fire(main)
+    # Fire(main)
+    Fire(main2)
