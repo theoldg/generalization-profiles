@@ -193,6 +193,8 @@ def _aggregate_surprisals_over_neighborhoods(
     top_args = np.argpartition(similarities, -top_k, axis=1)[:, -top_k:]
     neighbor_idx = validation_idx[top_args]
 
+    # Is this wrong??
+    # TODO
     aggregated_values = np.take(
         surprisals.values,
         surprisals.seq_idx_to_data_idx(neighbor_idx),
