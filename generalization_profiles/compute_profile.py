@@ -72,7 +72,7 @@ class Surprisals:
 
 @typing.no_type_check
 @cache
-def _load_dataset() -> dict[str, pd.DataFrame]:
+def load_dataset() -> dict[str, pd.DataFrame]:
     return {
         name: data.with_format("pandas")[:]
         for name, data in datasets.load_dataset(
@@ -82,7 +82,7 @@ def _load_dataset() -> dict[str, pd.DataFrame]:
 
 
 def _load_surprisals_for_variant(model_variant: str) -> Surprisals:
-    df = _load_dataset()[model_variant]
+    df = load_dataset()[model_variant]
     df = df.loc[df.seq_idx < pythia.FIRST_REPEATED_SEQ_IDX]
     df = df.loc[df.step < pythia.FIRST_STEP_OF_SECOND_EPOCH]
     df = df.sort_values(by=["step", "seq_idx"])
