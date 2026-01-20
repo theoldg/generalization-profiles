@@ -96,7 +96,7 @@ def _load_and_stack(files: list[Path]) -> np.ndarray:
 
 
 if __name__ == '__main__':
-    results_path = Path('../results')
+    results_path = Path('results')
 
     output_dir = results_path / 'neighbors'
     intermediate_output_dir = output_dir / 'intermediate'
@@ -108,13 +108,13 @@ if __name__ == '__main__':
 
     chosen_idx = choose_seq_idx()
 
-    valid_mask = segments_df.seq_idx.isin(chosen_idx['valid'])
+    valid_mask = segments_df.seq_idx.isin(chosen_idx['valid']) & (segments_df.start_idx != 0)
     valid_segments = segments_df.loc[valid_mask]
     valid_embds = embeddings[valid_mask]
     valid_embds_path = intermediate_output_dir / 'valid_embds.npy'
     np.save(valid_embds_path, valid_embds)
 
-    source_mask = segments_df.seq_idx.isin(chosen_idx['source'])
+    source_mask = segments_df.seq_idx.isin(chosen_idx['source']) & (segments_df.start_idx != 0)
     source_segments = segments_df.loc[source_mask]
     source_embds = embeddings[source_mask]
     source_embds_path = intermediate_output_dir / 'source_embds.npy'
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     mp_output_path = intermediate_output_dir / 'mp_output'
     mp_output_path.mkdir(exist_ok=True)
     
-    batch_size = 512
+    batch_size = 1024
     n_processes = os.cpu_count()
     with ProcessPoolExecutor(n_processes) as executor:
         futures = set()
