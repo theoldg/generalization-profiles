@@ -35,17 +35,23 @@ def build_df(
     ki = list(K_VALUES).index(k)
     model_agg_dir = Path("results/aggregated_surprisals") / model
     assert model_agg_dir.exists()
-    paths = list(model_agg_dir.glob("*.npy"))
+
+    def _get_step(p: Path) -> int:
+        return int(p.with_suffix("").name)
+
+    paths = [
+        p for p in model_agg_dir.glob("*.npy")
+        if _get_step(p) < pythia.FIRST_STEP_OF_SECOND_EPOCH
+    ]
 
     sampling_mask = np.random.random(size=len(source_segments)) < sampling_ratio
     source_segments = source_segments.loc[sampling_mask]
 
     def _load_agg(p: Path):
-        step = int(p.with_suffix("").name)
         data = np.copy(
             np.load(p, mmap_mode="r")[sampling_mask, ki]
         )
-        return step, data
+        return _get_step(p), data
 
     with ThreadPoolExecutor(8) as executor:
         loaded = list(tqdm(

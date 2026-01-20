@@ -29,8 +29,6 @@ from generalization_profiles.embeddings import (
 class Profile:
     """A memorization or generalization profile."""
 
-    n_macro_batches: int
-
     # Shape: (n_macro_batches,)
     # The training step for each macro batch index.
     step: np.ndarray
@@ -43,6 +41,8 @@ class Profile:
     # Shape: (n_macro_batches, n_macro_batches)
     # std[i, j] is the standard deviation for values[i, j].
     std_error: np.ndarray
+
+    n_macro_batches: int | None = None
 
 
 @dataclass

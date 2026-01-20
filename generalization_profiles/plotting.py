@@ -21,18 +21,21 @@ def plot_profile(profile: Profile, threshold=1.96):
     plt.figure(figsize=(10, 8))
 
     def crop_flip(x):
-        return x[1:, 1:].T[::-1]
+        return x[1:, 1:].T
 
     data = crop_flip(profile.values)
     err = crop_flip(profile.std_error)
     sig_mask = np.abs(data) > (threshold * err)
     plot_data = np.where(sig_mask, -data, np.nan)
+
     limit = np.nanmax(np.abs(plot_data)) if not np.all(np.isnan(plot_data)) else 0.1
+
     im = plt.imshow(plot_data, cmap="RdBu_r", vmin=-limit, vmax=limit)
     plt.colorbar(im, label="Memorization (Δ Log-Likelihood)")
     plt.title(f"Memorization Profile (Significant at z > {threshold})")
     plt.xlabel("Checkpoint Step")
     plt.ylabel("Treatment Step")
+    plt.gca().invert_yaxis()
     plt.tight_layout()
     plt.show()
 
