@@ -105,6 +105,31 @@ def _load_surprisals_for_variant(model_variant: str) -> Surprisals:
     return Surprisals(step=np.array(steps), seq_idx=seq_idx, values=np.stack(values))
 
 
+def posprocess_attgt(att_results: pd.DataFrame) -> Profile:
+    att_results.columns = att_results.columns.droplevel([0, 1])
+    res_df = att_results.reset_index()
+
+    time_vals = sorted(res_df["time"].unique())
+    time_to_index = {t: i for i, t in enumerate(time_vals)}
+    cohorts = sorted(res_df["cohort"].unique())
+    cohort_to_index = {c: i for i, c in enumerate(cohorts)}
+
+    profile = np.zeros((len(time_vals), len(time_vals))) * np.nan
+    std_error = np.copy(profile)
+    for _, r in res_df.iterrows():
+        time_index = time_to_index[r["time"]]
+        cohort_index = cohort_to_index[r["cohort"]]
+        profile[time_index, cohort_index] = r["ATT"]
+        std_error[time_index, cohort_index] = r["std_error"]
+
+    return Profile(
+        n_macro_batches=len(time_vals),
+        step=np.array(time_vals),
+        values=profile,
+        std_error=std_error,
+    )
+
+
 def _compute_profile_from_surprisals(
     surprisals: Surprisals,
     macro_batching_factor: int,
@@ -141,29 +166,7 @@ def _compute_profile_from_surprisals(
         n_jobs=-1,
     )
 
-    att_results.columns = att_results.columns.droplevel([0, 1])
-    res_df = att_results.reset_index()
-    num_macro_batches = len(surprisals.step)
-
-    time_vals = sorted(res_df["time"].unique())
-    time_to_index = {t: i for i, t in enumerate(time_vals)}
-    cohorts = sorted(res_df["cohort"].unique())
-    cohort_to_index = {c: i for i, c in enumerate(cohorts)}
-
-    profile = np.zeros((num_macro_batches, num_macro_batches)) * np.nan
-    std_error = np.copy(profile)
-    for _, r in res_df.iterrows():
-        time_index = time_to_index[r["time"]]
-        cohort_index = cohort_to_index[r["cohort"]]
-        profile[time_index, cohort_index] = r["ATT"]
-        std_error[time_index, cohort_index] = r["std_error"]
-
-    return Profile(
-        n_macro_batches=len(surprisals.step),
-        step=surprisals.step,
-        values=profile,
-        std_error=std_error,
-    )
+    return posprocess_attgt(att_results)
 
 
 def _macro_batch(
