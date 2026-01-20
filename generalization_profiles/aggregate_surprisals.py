@@ -6,6 +6,9 @@ import numpy as np
 from tqdm.auto import tqdm
 
 
+K_VALUES = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+
+
 def set_seg_id(df):
     # A bit of a hack but hey it's fast
     df.index = (df.seq_idx.values << 32) | (df.start_idx.values << 16)| (df.num_tokens.values)
@@ -33,7 +36,6 @@ def _aggregate_surprisals_for_checkpoint(path: Path):
 
 
 if __name__ == '__main__':
-    K_VALUES = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
     SOURCE_SEGMENTS = pd.read_parquet('results/neighbors/source_segments.parquet')
     NEIGHBOR_IDX = np.vstack(SOURCE_SEGMENTS.neighbor_idx.values)  # type: ignore
     VALID_SEGMENTS = pd.read_parquet('results/neighbors/valid_segments.parquet')
