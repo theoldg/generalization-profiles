@@ -7,6 +7,7 @@ os.environ["PYTHONWARNINGS"] = (
     "ignore:pkg_resources is deprecated:UserWarning:property_cached,"
 )
 
+from typing import Literal
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -28,6 +29,7 @@ def build_df(
     model: str,
     source_segments: pd.DataFrame,
     sampling_ratio: float,
+    verbose: bool = False,
 ):
     assert k in K_VALUES
     assert model in MODEL_VARIANTS
@@ -57,6 +59,7 @@ def build_df(
         loaded = list(tqdm(
             executor.map(_load_agg, paths),
             desc='Loading neighborhood surprisals',
+            disable=not verbose,
         ))
 
     dfs = []
@@ -75,10 +78,22 @@ def create_profile(
     model: str,
     sampling_ratio: float,
     output_dir: str | Path = 'results/sentence_level_profiles',
+    if_exists: Literal['skip', 'replace', 'error'] = 'replace',
 ):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     target_path = output_dir / f'{model}_k={k}.pkl'
+
+    if target_path.exists():
+        match if_exists:
+            case 'skip':
+                return
+            case 'replace':
+                pass
+            case 'error':
+                raise FileExistsError(f'File already exists: {target_path}')
+            case _:
+                raise ValueError(f'Incorrect argument {if_exists = }')
 
     source_segments = pd.read_parquet("results/neighbors/source_segments.parquet")
     df = build_df(
