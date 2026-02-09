@@ -6,7 +6,7 @@ from generalization_profiles import Profile
 from generalization_profiles.plotting import ProfilePlot
 from generalization_profiles.pythia import MODEL_VARIANTS
 
-from generalization_profiles.aggregate_surprisals import K_VALUES
+from aggregate_surprisals import K_VALUES
 
 MODEL_VARIANTS.remove("2.8b")
 

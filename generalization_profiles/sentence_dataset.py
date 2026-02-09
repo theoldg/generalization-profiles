@@ -1,13 +1,11 @@
 import typing
 
 import datasets
+import spacy
 from tqdm import tqdm
-import pysbd
 from transformers import AutoTokenizer
 import numpy as np
 import pandas as pd
-
-from generalization_profiles.pythia import PythiaModel
 
 
 @typing.no_type_check
@@ -23,6 +21,13 @@ def load_dataset(tokenizer: AutoTokenizer) -> pd.DataFrame:
     return df
 
 
+def load_spacy_model():
+    return spacy.load(
+        "en_core_web_trf",
+        disable=["ner", "tagger", "attribute_ruler", "lemmatizer"],
+    )
+
+
 def mask_list(lst: list, mask: np.ndarray) -> list:
     # Do the same as x[boolean_index] for numpy, except with a list.
     assert mask.ndim == 1
@@ -32,7 +37,7 @@ def mask_list(lst: list, mask: np.ndarray) -> list:
 
 def segment_tokens(
     seq: np.ndarray,
-    text: str,
+    segments: list[str],
     tokenizer: AutoTokenizer,
     minimum_tokens_per_segment: int = 2,
 ) -> pd.DataFrame:
@@ -54,11 +59,6 @@ def segment_tokens(
         tokenizer: The HuggingFace tokenizer used to process segments.
         minimum_tokens_per_segment: Minimum length a segment must have to be included.
     """
-
-    segmenter = pysbd.Segmenter(language="en", clean=False)
-    segments = segmenter.segment(text)
-    segments = [s.strip() for s in segments]
-
     tokenization_result = tokenizer(
         segments,
         padding=True,
@@ -105,19 +105,38 @@ def segment_tokens(
     )
 
 
-def segment_dataset_to_parquet() -> None:
+def segment_dataset_to_parquet(
+    target_path='results/segmentation_results.parquet',
+) -> None:
     tokenizer = AutoTokenizer.from_pretrained(
         f"EleutherAI/pythia-70m",
         revision=f"step0",
     )
+    tokenizer.pad_token = '[PAD]'  # idk
     df = load_dataset(tokenizer)
 
-    # Suboptimal but it runs in 10 mins so it's ok.
     result = []
-    for _, r in tqdm(df.iterrows(), total=len(df)):
-        seg = segment_tokens(r.input_ids, r.text, tokenizer=tokenizer)
+
+    spacy_model = load_spacy_model()
+    for (_, r), doc in tqdm(
+        zip(
+            df.iterrows(),
+            spacy_model.pipe(
+                df.text,
+                batch_size=8,
+                n_process=1,
+            ),
+        ),
+        total=len(df),
+    ):
+        segments = [str(s) for s in doc.sents]
+        seg = segment_tokens(
+            seq=r.input_ids,
+            segments=segments,
+            tokenizer=tokenizer,
+        )
         seg["seq_idx"] = r.seq_idx
         result.append(seg)
 
     result = pd.concat(result)
-    result.to_parquet('segmentation_results.parquet')
+    result.to_parquet(target_path)
