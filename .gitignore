@@ -12,5 +12,5 @@ wheels/
 .ruff_cache
 cache
 
-srap/*.parquet
+scrap/*.parquet
 results/
