@@ -6,7 +6,7 @@ import numpy as np
 from tqdm.auto import tqdm
 
 
-K_VALUES = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+K_VALUES = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024])
 
 
 def set_seg_id(df):
@@ -47,4 +47,3 @@ if __name__ == '__main__':
             executor.map(_aggregate_surprisals_for_checkpoint, paths),
             total=len(paths),
         ))
-    

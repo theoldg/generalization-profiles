@@ -103,7 +103,7 @@ def create_profile(
         sampling_ratio=sampling_ratio,
     )
 
-    # The cohort is the macro batch index (and NaN for validation samples).
+    # The cohort is the batch index (and NaN for validation samples).
     macro_batch_size = pythia.BATCH_SIZE * pythia.CHECKPOINT_INTERVAL
     df["cohort"] = (
         (1 + df["seq_idx"] // macro_batch_size).astype(int)

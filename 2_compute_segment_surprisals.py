@@ -110,5 +110,5 @@ if __name__ == "__main__":
     for variant in MODEL_VARIANTS:
         steps.extend(get_steps_for_variant(variant))
 
-    with ThreadPoolExecutor(64) as executor:
+    with ThreadPoolExecutor(16) as executor:
         executor.map(process_step, steps)
