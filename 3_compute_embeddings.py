@@ -32,9 +32,12 @@ class EmbeddingClient:
             config=self._config,
         )
         assert response.embeddings is not None
-        ret = np.vstack([
-            np.array(e.values) for e in response.embeddings
-        ])
+        ret = []
+        for e in response.embeddings:
+            assert e.values is not None
+            assert len(e.values) > 0
+            ret.append(np.array(e.values))
+        ret = np.vstack(ret)
         ret /= np.linalg.norm(ret, axis=1)[:, None]
         return ret
 
@@ -98,7 +101,7 @@ def main(
     segments_path: str = 'results/segments.parquet',
     target_path: str = 'results/embeddings/batches',  # type: ignore
     rpm: int = 2900,
-    n_threads: int = 32,
+    n_threads: int = 16,
     batch_size: int = 2000,
 ):
     segments_df = pd.read_parquet(segments_path)
