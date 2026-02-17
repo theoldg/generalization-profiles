@@ -18,23 +18,20 @@ from differences import ATTgt
 from fire import Fire
 import pickle
 
-from generalization_profiles.compute_profile import posprocess_attgt
-from aggregate_surprisals import K_VALUES
+from generalization_profiles.compute_profile import posprocess_attgt, Profile
 from generalization_profiles.pythia import MODEL_VARIANTS
 from generalization_profiles import pythia
 
 
 def build_df(
-    k: int,
+    ki: int,
     model: str,
     source_segments: pd.DataFrame,
     sampling_ratio: float,
     verbose: bool = False,
 ):
-    assert k in K_VALUES
     assert model in MODEL_VARIANTS
 
-    ki = list(K_VALUES).index(k)
     model_agg_dir = Path("results/aggregated_surprisals") / model
     assert model_agg_dir.exists()
 
@@ -75,19 +72,20 @@ def build_df(
 
 def create_profile(
     k: int,
+    ki: int,
     model: str,
     sampling_ratio: float,
     output_dir: str | Path = 'results/sentence_level_profiles',
-    if_exists: Literal['skip', 'replace', 'error'] = 'replace',
-):
+    if_exists: Literal['return', 'replace', 'error'] = 'replace',
+) -> Profile:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     target_path = output_dir / f'{model}_k={k}.pkl'
 
     if target_path.exists():
         match if_exists:
-            case 'skip':
-                return
+            case 'return':
+                return pickle.loads(target_path.read_bytes())
             case 'replace':
                 pass
             case 'error':
@@ -97,7 +95,7 @@ def create_profile(
 
     source_segments = pd.read_parquet("results/neighbors/source_segments.parquet")
     df = build_df(
-        k=k,
+        ki=ki,
         model=model,
         source_segments=source_segments,
         sampling_ratio=sampling_ratio,
@@ -115,11 +113,12 @@ def create_profile(
         "sup_seq",
         est_method="dr",
         control_group="never_treated",
-        n_jobs=-1,
+        n_jobs=16,
     )
 
     profile = posprocess_attgt(att_results)
     target_path.write_bytes(pickle.dumps(profile))
+    return profile
 
 
 if __name__ == "__main__":

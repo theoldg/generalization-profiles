@@ -41,11 +41,17 @@ def plot_profile(profile: Profile, threshold=1.96):
 
 
 class ProfilePlot(pn.viewable.Viewer):
-    def __init__(self, profile: Profile, threshold: float = 1.96):
+    def __init__(
+        self,
+        profile: Profile,
+        threshold: float = 1.96,
+        slider: bool = False,
+    ):
         super().__init__()
 
         self.profile = profile
         self.threshold = threshold
+        self.slider = slider
 
         def crop_flip(x):
             return x[1:, 1:].T
@@ -107,5 +113,11 @@ class ProfilePlot(pn.viewable.Viewer):
         self._update_cds_data()
 
     def __panel__(self):
-        return self.fig
+        if self.slider:
+            slider = pn.widgets.FloatInput(start=0, end=5, name='Threshold')
+            slider.param.watch(lambda e: self.update_threshold(e.new), 'value')
+        else:
+            slider = None
+
+        return pn.Column(self.fig, slider)
 
