@@ -114,7 +114,7 @@ class ProfilePlot(pn.viewable.Viewer):
 
     def __panel__(self):
         if self.slider:
-            slider = pn.widgets.FloatInput(start=0, end=5, name='Threshold')
+            slider = pn.widgets.FloatSlider(start=0, end=5, name='Threshold', value=self.threshold)
             slider.param.watch(lambda e: self.update_threshold(e.new), 'value')
         else:
             slider = None

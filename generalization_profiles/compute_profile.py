@@ -105,7 +105,7 @@ def _load_surprisals_for_variant(model_variant: str) -> Surprisals:
     return Surprisals(step=np.array(steps), seq_idx=seq_idx, values=np.stack(values))
 
 
-def posprocess_attgt(att_results: pd.DataFrame) -> Profile:
+def postprocess_attgt(att_results: pd.DataFrame) -> Profile:
     att_results.columns = att_results.columns.droplevel([0, 1])
     res_df = att_results.reset_index()
 
@@ -166,7 +166,7 @@ def _compute_profile_from_surprisals(
         n_jobs=-1,
     )
 
-    return posprocess_attgt(att_results)
+    return postprocess_attgt(att_results)
 
 
 def _macro_batch(

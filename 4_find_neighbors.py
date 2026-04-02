@@ -128,30 +128,31 @@ def _load_and_stack(files: list[Path]) -> np.ndarray:
 def main(
     segments_parquet: Path = Path('results/segments.parquet'),
     embeddings_npy: Path = Path('results/embeddings/embeddings.npy'),
-    n_neighbors: int = 1024,
+    n_neighbors: int = 2048,
     output_dir: Path = Path('results/neighbors'),
 ):
     segments_df = pd.read_parquet(segments_parquet)
     embeddings = np.load(embeddings_npy, mmap_mode='r')
     assert len(segments_df) == len(embeddings)
 
-    is_valid = segments_df.text.map(is_sentence_valid)
-    is_valid &= segments_df.start_idx != 0
-    is_valid &= (segments_df.start_idx + segments_df.num_tokens) != 2049
+    is_segment_ok = segments_df.text.map(is_sentence_valid)
+    is_segment_ok &= segments_df.start_idx != 0
+    is_segment_ok &= (segments_df.start_idx + segments_df.num_tokens) != 2049
+    is_segment_ok &= ~segments_df.duplicated(subset=['seq_idx', 'start_idx'])
 
     intermediate_output_dir = output_dir / 'intermediate'
     intermediate_output_dir.mkdir(parents=True, exist_ok=True)
 
     chosen_seq_idx = choose_seq_idx()
 
-    valid_mask = segments_df.seq_idx.isin(chosen_seq_idx['valid']) & is_valid
+    valid_mask = segments_df.seq_idx.isin(chosen_seq_idx['valid']) & is_segment_ok
     print(f'Validation samples: {valid_mask.sum():,}')
     valid_segments = segments_df.loc[valid_mask]
     valid_embds = embeddings[valid_mask]
     valid_embds_path = intermediate_output_dir / 'valid_embds.npy'
     np.save(valid_embds_path, valid_embds)
 
-    source_mask = segments_df.seq_idx.isin(chosen_seq_idx['source']) & is_valid
+    source_mask = segments_df.seq_idx.isin(chosen_seq_idx['source']) & is_segment_ok
     print(f'Source samples: {source_mask.sum():,}')
     source_segments = segments_df.loc[source_mask]
     source_embds = embeddings[source_mask]

@@ -18,7 +18,7 @@ from differences import ATTgt
 from fire import Fire
 import pickle
 
-from generalization_profiles.compute_profile import posprocess_attgt, Profile
+from generalization_profiles.compute_profile import postprocess_attgt, Profile
 from generalization_profiles.pythia import MODEL_VARIANTS
 from generalization_profiles import pythia
 
@@ -75,6 +75,7 @@ def create_profile(
     ki: int,
     model: str,
     sampling_ratio: float,
+    n_jobs: int = 16,
     output_dir: str | Path = 'results/sentence_level_profiles',
     if_exists: Literal['return', 'replace', 'error'] = 'replace',
 ) -> Profile:
@@ -113,10 +114,10 @@ def create_profile(
         "sup_seq",
         est_method="dr",
         control_group="never_treated",
-        n_jobs=16,
+        n_jobs=n_jobs,
     )
 
-    profile = posprocess_attgt(att_results)
+    profile = postprocess_attgt(att_results)
     target_path.write_bytes(pickle.dumps(profile))
     return profile
 

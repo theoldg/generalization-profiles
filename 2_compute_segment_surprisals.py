@@ -1,43 +1,54 @@
 from dataclasses import dataclass
 import re
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fire import Fire
 import numpy as np
-import datasets
-from huggingface_hub import HfFileSystem
+from tqdm.auto import tqdm
 import pandas as pd
 
-from generalization_profiles.pythia import MODEL_VARIANTS, FIRST_STEP_OF_SECOND_EPOCH
-
-datasets.disable_caching()
+from generalization_profiles.pythia import MODEL_VARIANTS
 
 
-@dataclass(order=True)
+"""
+A cool 500 GB, downloaded via:
+
+huggingface-cli download \
+    "pietrolesci/pythia-deduped-stats-raw" \
+    --repo-type dataset \
+    --local-dir ./data \
+    --max-workers 32
+"""
+DATA_DIR = Path("data")
+
+
+@dataclass
 class VariantStep:
     variant: str
     step: int
-    data_dir: str
+    parquet_path: Path
 
 
 def get_steps_for_variant(variant: str) -> list[VariantStep]:
-    fs = HfFileSystem()
-    prefix = "datasets/pietrolesci/pythia-deduped-stats-raw/"
-    ls = fs.ls(f"{prefix}{variant}/")
-    ret = []
-    for item in ls:
-        data_dir = item["name"].removeprefix(prefix)
-        step = int(re.search(r"step(\d+)", data_dir).groups()[0])
-        ret.append(
-            VariantStep(
-                variant=variant,
-                step=step,
-                data_dir=data_dir,
-            )
+    variant_dir = DATA_DIR / variant
+    assert variant_dir.exists()
+    step_paths = sorted(variant_dir.glob("*/*.parquet"))
+    assert step_paths
+
+    def _get_step(p: Path) -> int:
+        m = re.search(r"-step(\d+)\.", p.name)
+        assert m, str(p)
+        return int(m.groups()[0])
+
+    return [
+        VariantStep(
+            variant=variant,
+            step=_get_step(p),
+            parquet_path=p,
         )
-    ret = [r for r in ret if r.step < FIRST_STEP_OF_SECOND_EPOCH]
-    return sorted(ret)
+        for p in step_paths
+    ]
 
 
 def compute_surprisals(
@@ -47,23 +58,37 @@ def compute_surprisals(
     assert (segments_df.start_idx == 0).sum() == 0
     dataset_size = len(raw_stats_df)
 
+    # Maps [seq_idx] -> [index in raw_stats_df].
     seq_idx_to_seq_i = {idx: i for i, idx in enumerate(raw_stats_df.seq_idx)}
-    # Surprisals are not available for all segments    
-    segments_df = segments_df.loc[segments_df.seq_idx.isin(set(seq_idx_to_seq_i))]
+    # Surprisals are not available for all segments.
+    segments_df = (
+        segments_df
+        .loc[segments_df.seq_idx.isin(set(seq_idx_to_seq_i))]
+        .reset_index(drop=True)
+    )
+    # For each segment in segments_df, the index of the corresponding
+    # row in raw_stats_df.
+    # Shape: (n_segments,)
     segment_seq_i = segments_df.seq_idx.map(seq_idx_to_seq_i.__getitem__)
-    
-    # shape: (dataset_size, seq_length)
-    sup = np.stack(raw_stats_df.sup.values)  # type: ignore
-    sup_cumsum = np.hstack((np.zeros((dataset_size, 1)), sup.cumsum(-1)))
-    
+
+    # Sanity check
+    assert (raw_stats_df.seq_idx.values[segment_seq_i] == segments_df.seq_idx.values).all()
+
+    # Shape: (dataset_size, seq_length)
+    raw_surprisals = np.stack(raw_stats_df.sup.values)  # type: ignore
+    # Shape: (dataset_size, 1 + seq_length)
+    sup_cumsum = np.hstack((np.zeros((dataset_size, 1)), raw_surprisals.cumsum(-1)))
+
+    # Shape: (n_segments,)
     start = segments_df.start_idx - 1
     assert (start >= 0).all()
-    end = segments_df.start_idx + segments_df.num_tokens - 1
-    
+    # Shape: (n_segments,)
+    end = start + segments_df.num_tokens
+
     segment_total_sup = (
         sup_cumsum[segment_seq_i, end] - sup_cumsum[segment_seq_i, start]
     )
-    avg_sup = segment_total_sup / segments_df.num_tokens  
+    avg_sup = segment_total_sup / segments_df.num_tokens.values
     return pd.DataFrame(
         {
             "seq_idx": segments_df.seq_idx,
@@ -74,25 +99,16 @@ def compute_surprisals(
     )
 
 
-def process_step(step: VariantStep):
-    print("Processing", step.data_dir)
-    target_path = f"results/segment_surprisals/{step.variant}/{step.step}.parquet"
+def process_step(variant_step: VariantStep):
+    target_path = f"results/segment_surprisals/{variant_step.variant}/{variant_step.step}.parquet"
     target_path = Path(target_path)
     if target_path.exists():
-        print("SKIPPING BECAUSE EXISTS:", target_path)
-        return
+        raise FileExistsError(str(target_path))
     target_path.parent.mkdir(exist_ok=True, parents=True)
-
-    ds = datasets.load_dataset(
-        "pietrolesci/pythia-deduped-stats-raw",
-        data_dir=step.data_dir,
-    )
-
-    raw_stats_df: pd.DataFrame = ds["train"].with_format("pandas")[:]  # type: ignore
+    raw_stats_df = pd.read_parquet(variant_step.parquet_path)
     assert SEGMENTS_DF is not None
     sup_df = compute_surprisals(raw_stats_df, SEGMENTS_DF)
     sup_df.to_parquet(target_path)
-    ds.cleanup_cache_files()
 
 
 def load_segments(segments_path: str):
@@ -104,11 +120,17 @@ if __name__ == "__main__":
     SEGMENTS_DF = None
     Fire(load_segments)
     assert isinstance(SEGMENTS_DF, pd.DataFrame)
+
     SEGMENTS_DF = SEGMENTS_DF.loc[SEGMENTS_DF.start_idx != 0].reset_index(drop=True)
 
     steps = []
     for variant in MODEL_VARIANTS:
         steps.extend(get_steps_for_variant(variant))
-
-    with ThreadPoolExecutor(16) as executor:
-        executor.map(process_step, steps)
+    
+    with ThreadPoolExecutor(32) as executor:
+        futures = set()
+        for step in steps:
+            futures.add(executor.submit(process_step, step))
+        
+        for f in tqdm(as_completed(futures), total=len(futures)):
+            f.result()
